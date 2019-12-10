@@ -1,0 +1,137 @@
+#include <pthread.h>
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+#include <cstdlib> //sleep
+#include <stdbool.h>
+#include <math.h>
+#include <string>
+#include <iostream>
+
+/*
+ * 
+ */
+
+typedef struct arguments{
+    int* buffer;
+    int bufferSize;
+    int maxCount;
+    int lastIndex;
+    int intervalA;
+    int intervalB;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ARGUMENTS;
+
+
+int factorial(int i)
+{
+    if(i == 1 || i == 0 )
+        return 1;
+    else
+        return i * factorial(i-1);
+}
+
+int cominationNumber(int n, int k)
+{
+    return factorial(n) / (factorial(n-k) * factorial(k));
+}
+
+void* produceRand(void* args)
+{
+    ARGUMENTS* myArgs = (ARGUMENTS*) args;
+    int produced = 0;
+    int randomNumber1;
+    int randomNumber2;
+    int tmp;
+    while(produced < myArgs->maxCount)
+    {
+        randomNumber1 = rand()%(myArgs->intervalB+1 - myArgs->intervalA) + myArgs->intervalA;
+        randomNumber2 = rand()%(myArgs->intervalB+1 - myArgs->intervalA) + myArgs->intervalA;
+        if( randomNumber1 < randomNumber2)
+        {
+            tmp= randomNumber1;
+            randomNumber1 = randomNumber2;
+            randomNumber2 = tmp;
+        }
+        pthread_mutex_lock(myArgs->mutex);
+        while(myArgs->lastIndex >= myArgs->bufferSize)
+        {
+            pthread_cond_wait(myArgs->empty, myArgs->mutex);
+        }
+        myArgs->buffer[myArgs->lastIndex++] = randomNumber1;
+        myArgs->buffer[myArgs->lastIndex++] = randomNumber2;
+        pthread_mutex_unlock(myArgs->mutex);
+        pthread_cond_signal(myArgs->full);
+        ++produced;
+    }
+    
+    
+    return NULL;
+}
+
+int main224(int argc, char** argv) {
+
+    //std::cout << std::to_string(factorial(6)) << std::endl;
+    if(argc < 4)
+    {
+        std::cerr << "Malo argumentov" << std::endl;
+        return 0;
+    }
+    for(int i = 1; i < 4; ++i)
+    {
+        if(std::atoi(argv[i]) < 0)
+        {
+            fprintf(stderr, "Nespravna hodnota parametra %d , jeho hodnota bola %d", i, std::atoi(argv[i]));
+            return 0;
+        }
+        
+    }
+    int bufferSize = 20;
+    int intervalA = std::atoi(argv[1]);
+    int intervalB = std::atoi(argv[2]);
+    if(intervalA > intervalB)
+    {
+        int tmp = intervalA;
+        intervalA = intervalB;
+        intervalB = tmp;
+    }
+    int pocetGenerovanych = std::atoi(argv[3]);
+    srand(time(0));
+    pthread_t vlakno;
+    pthread_mutex_t mutex;
+    pthread_cond_t empty;
+    pthread_cond_t full;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&empty, NULL);
+    pthread_cond_init(&full, NULL);
+    ARGUMENTS myArgs = {(int*)malloc(bufferSize * sizeof(int)), bufferSize, pocetGenerovanych, 0,  intervalA, intervalB, 
+    &empty, &full, &mutex};
+    
+    pthread_create(&vlakno, NULL, produceRand, &myArgs);
+    int spracovanych = 0;
+    int number1 = 0;
+    int number2 = 0;
+    while( spracovanych < myArgs.maxCount)
+    {
+        pthread_mutex_lock(myArgs.mutex);
+        while(myArgs.lastIndex == 0)
+        {
+            pthread_cond_wait(myArgs.full, myArgs.mutex);
+        }
+        number2 = myArgs.buffer[--myArgs.lastIndex];
+        number1 = myArgs.buffer[--myArgs.lastIndex];
+        pthread_mutex_unlock(myArgs.mutex);
+        pthread_cond_signal(myArgs.empty);
+        ++spracovanych;
+        std::cout << "Kombinacne cislo n: " << std::to_string(number1) << " k:" << std::to_string(number2) << " je " << cominationNumber(number1,number2)<< std::endl;
+    }
+    
+    pthread_join(vlakno, NULL);
+    pthread_mutex_destroy(myArgs.mutex);
+    pthread_cond_destroy(myArgs.empty);
+    pthread_cond_destroy(myArgs.full);
+    free(myArgs.buffer);
+    return 0;
+}
