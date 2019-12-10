@@ -1,0 +1,140 @@
+#include <cstdlib>
+#include <pthread.h>
+#include <cmath>
+#include <iostream>
+#include <stdbool.h>
+#include <unistd.h>
+
+
+
+typedef struct barman{
+    int* pocetDrinkov;
+    int typDrinku;
+    int pocetZakaznikov;
+    int pocetMoznychDrinkov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+    int pocetDrinkov1 = 0;
+    int pocetDrinkov2 = 0;
+}BARMAN;
+
+typedef struct zakaznik{
+    int id;
+    int* pocetDrinkov;
+    int typDrinku;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ZAKAZNIK;
+
+/*
+ * 
+ */
+void* barmanNalievaj(void* args)
+{
+    BARMAN* barman = (BARMAN*) args;
+    int produced = 0;
+    std::cout << "Bar je otvoreny" << std::endl;
+    int typDrinku = 0;
+    while(produced < barman->pocetZakaznikov)
+    {
+        typDrinku = rand()%2;
+        pthread_mutex_lock(barman->mutex);
+        while((*barman->pocetDrinkov) >= barman->pocetMoznychDrinkov)
+        {
+            std::cout << "Barman caka na odobratie drinku z pultu" << std::endl;
+            pthread_cond_wait(barman->empty, barman->mutex);
+        }
+        pthread_mutex_unlock(barman->mutex);
+        std::cout << "Barman ide miesat drink " << typDrinku+1 << std::endl; 
+        if (typDrinku)
+        {
+            sleep(2);
+            barman->pocetDrinkov1++;
+        }
+        else
+        {
+            sleep(1);
+            barman->pocetDrinkov2++;
+        }
+            
+        pthread_mutex_lock(barman->mutex);
+        (*barman->pocetDrinkov)++;
+        pthread_mutex_unlock(barman->mutex);
+        std::cout << "Barman namiesal drink, aktualny pocet drinkov na stole je "
+                << *(barman->pocetDrinkov) << std::endl;
+        pthread_cond_signal(barman->full);
+        ++produced;
+    }
+    std::cout << "Bar je zatvoreny" << std::endl;
+    printf("Barman skoncil svoje poslanie, namiesal %d drinkov typu 1 a %d drinkov typu 2\n", barman->pocetDrinkov1, barman->pocetDrinkov2);
+}
+
+void* zakaznikPrichadza(void* args)
+{
+    ZAKAZNIK* zakaznik = (ZAKAZNIK*) args;
+    int prichod = rand()%(20+1 - 10) + 10;
+    sleep(prichod);
+    printf("Zakaznik %d prichadza do baru\n", zakaznik->id);
+    pthread_mutex_lock(zakaznik->mutex);
+    while((*zakaznik->pocetDrinkov) == 0)
+    {
+        printf("Zakaznik %d caka na drink, lebo na stole nie je ziaden\n", zakaznik->id);
+        pthread_cond_wait(zakaznik->full, zakaznik->mutex);
+    }
+    (*zakaznik->pocetDrinkov)--;
+    printf("Zakaznik %d si vzal drink\n", zakaznik->id);
+    pthread_mutex_unlock(zakaznik->mutex);
+    pthread_cond_signal(zakaznik->empty);
+}
+
+int main124125125(int argc, char** argv) {
+    srand(time(0));
+    int pocetZakaznikov = 10;
+    int pocetDrinkov = 0;
+    pthread_t barmanVlakno;
+    pthread_t zakazniciVlakno[pocetZakaznikov];
+    pthread_mutex_t mutex;
+    pthread_cond_t empty;
+    pthread_cond_t full;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&empty, NULL);
+    pthread_cond_init(&full, NULL);
+    
+    /*
+     * int* pocetDrinkov;
+    int typDrinku;
+    int pocetZakaznikov;
+    int pocetMoznychDrinkov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+     */
+    BARMAN barman = {&pocetDrinkov, 0, pocetZakaznikov, 3, &empty, &full, &mutex};
+    ZAKAZNIK zakaznici[pocetZakaznikov];
+    pthread_create(&barmanVlakno, NULL, barmanNalievaj, &barman);
+    for(int i = 0; i < pocetZakaznikov; ++i)
+    {
+        /*
+         int id;
+    int* pocetDrinkov;
+    int typDrinku;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+         
+         */
+        zakaznici[i] = {i, &pocetDrinkov, 0, &empty, &full, &mutex};
+        pthread_create(&zakazniciVlakno[i], NULL, zakaznikPrichadza, &zakaznici[i]);
+    }
+    pthread_join(barmanVlakno, NULL);
+    for(int i = 0; i < pocetZakaznikov; ++i)
+        pthread_join(zakazniciVlakno[i], NULL);
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&empty);
+    pthread_cond_destroy(&full);
+    
+    return 0;
+}
+
