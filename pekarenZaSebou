@@ -1,0 +1,149 @@
+#include <cstdlib>
+#include <iostream>
+#include <pthread.h>
+#include <unistd.h>
+
+/*
+ * 
+ */
+
+typedef struct pekar{
+    int* chlebovNaStole;
+    int maxChlebov;
+    int zakaznikov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}PEKAR;
+typedef struct zakaznik{
+    int idZakaznika;
+    int* chlebovNaStole;
+    int zakaznikov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ZAKAZNIK;
+
+void* pekarPec(void* args)
+{
+    PEKAR* pekar = (PEKAR*)args;
+    int produced = 0;
+    int randCislo = 0;
+    std::cout << "Pekaren otvorena" << std::endl;
+    while(produced < pekar->zakaznikov)
+    {
+        
+        pthread_mutex_lock(pekar->mutex);
+        while((*pekar->chlebovNaStole) >= pekar->maxChlebov)
+        {
+            std::cout << "Stol je plny, pekar caka na odobratie chleba" << std::endl;
+            pthread_cond_wait(pekar->empty, pekar->mutex);
+        }
+        std::cout << "Pekar zacina piect chleba" << std::endl;
+        pthread_mutex_unlock(pekar->mutex);
+        sleep(2);
+        pthread_mutex_lock(pekar->mutex);
+        (*pekar->chlebovNaStole)++;
+        std::cout << "Pekar upiekol chleba, chlebov na stole: " <<
+                std::to_string((*pekar->chlebovNaStole)) <<std::endl;
+        pthread_mutex_unlock(pekar->mutex);
+        pthread_cond_signal(pekar->full);
+        ++produced;
+    }
+    pthread_mutex_lock(pekar->mutex);
+    while((*pekar->chlebovNaStole) != 0)
+        pthread_cond_wait(pekar->empty, pekar->mutex);
+    std::cout << "Pekaren zatvorena" << std::endl;
+    pthread_mutex_unlock(pekar->mutex);   
+    usleep(5000);
+    return NULL;
+}
+
+void* zakaznikFun(void* args)
+{
+    ZAKAZNIK* zakaznik = (ZAKAZNIK*)args;
+    int id = 0;
+    int dlzkaPrichodu;
+    while(id < zakaznik->zakaznikov)
+    {
+        dlzkaPrichodu = rand()%(6+1 - 2) + 2;
+        zakaznik->idZakaznika = id;
+        sleep(dlzkaPrichodu);
+        printf("Zakaznik %d prisiel do pekarne po %d sekundach \n", zakaznik->idZakaznika, dlzkaPrichodu);
+        
+        pthread_mutex_lock(zakaznik->mutex);
+        while((*zakaznik->chlebovNaStole) == 0)
+        {
+            printf("Zakaznik %d caka, lebo na stole nie je ziaden chlieb \n", zakaznik->idZakaznika);
+            pthread_cond_wait(zakaznik->full, zakaznik->mutex);
+        }
+        (*zakaznik->chlebovNaStole)--;
+        printf("Zakaznik %d si vzal chleba a odchadza \n", zakaznik->idZakaznika);
+        pthread_mutex_unlock(zakaznik->mutex);
+        pthread_cond_signal(zakaznik->empty);
+        ++id;
+    }
+    
+    return NULL;
+}
+
+
+int main021051205(int argc, char** argv) {
+
+    int pocetZakaznikov = 10;
+    int maxPocetChlebov = 2;
+    int chlebovNaStole = 0;
+    pthread_t vlaknoPekar;
+    pthread_t vlaknoZakaznik;
+    pthread_mutex_t mutex;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_t empty;
+    pthread_cond_t full;
+    pthread_cond_init(&empty, NULL);
+    pthread_cond_init(&full, NULL);
+    /*
+     typedef struct pekar{
+    int* chlebovNaStole;
+    int zakaznikov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}PEKAR;
+typedef struct pekar{
+    int idZakaznika;
+    int* chlebovNaStole;
+    int zakaznikov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}PEKAR;
+
+     */
+    PEKAR pekar = {&chlebovNaStole, maxPocetChlebov,pocetZakaznikov, &empty, &full, &mutex};
+    ZAKAZNIK zakaznik = {0, &chlebovNaStole, pocetZakaznikov,
+    &empty, &full, &mutex};;
+    pthread_create(&vlaknoPekar, NULL, pekarPec, &pekar);
+    pthread_create(&vlaknoZakaznik, NULL, zakaznikFun, &zakaznik);
+    
+    
+    pthread_join(vlaknoZakaznik, NULL);
+    pthread_join(vlaknoPekar, NULL);
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&empty);
+    pthread_cond_destroy(&full);
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
