@@ -1,0 +1,139 @@
+#include <cstdlib>
+#include <pthread.h>
+#include <iostream>
+#include <cmath>
+
+
+typedef struct arguments{
+    int* buffer;
+    int bufferSize;
+    int pocetGenerovanych;
+    int start;
+    int count;
+    int intervalA;
+    int intervalB;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ARGUMENTS;
+
+void fibonacciNumber(int testNumber)
+{
+    if(testNumber < 0)
+    {
+        std::cout << testNumber << " nie je Fibonacciho cislo" << std::endl;
+        return;
+    }
+    if(testNumber <= 1)
+    {
+        std::cout << testNumber << " je Fibonacciho cislo" << std::endl;
+        return;
+    }
+    int fibPrevious = 1;
+    int fibNext = 1;
+    int sum = 1;
+    while(sum < testNumber)
+    {
+        sum = fibPrevious + fibNext;
+        fibPrevious = fibNext;
+        fibNext = sum;
+        if( sum == testNumber)
+        {
+            std::cout << testNumber << " je Fibonacciho cislo" << std::endl;
+            return;
+        }
+    }
+    std::cout << testNumber << " nie je Fibonacciho cislo" << std::endl;     
+}
+
+
+void* producentFibonacci(void* args)
+{
+    ARGUMENTS* myArgs = (ARGUMENTS*) args;
+    int cislo = 0;
+    int produced = 0;
+    while(produced < myArgs->pocetGenerovanych)
+    {
+        cislo = rand()%(myArgs->intervalB + 1 - myArgs->intervalA) + myArgs->intervalA;
+        pthread_mutex_lock(myArgs->mutex);
+        while(myArgs->count >= myArgs->bufferSize)
+        {
+            pthread_cond_wait(myArgs->empty, myArgs->mutex);
+        }
+        myArgs->buffer[(myArgs->start + myArgs->count++)%myArgs->bufferSize] = cislo;
+        pthread_mutex_unlock(myArgs->mutex);
+        pthread_cond_signal(myArgs->full);
+        ++produced;
+    }
+    return NULL;
+}
+
+void* consumentFibonacci(void* args)
+{
+    ARGUMENTS* myArgs = (ARGUMENTS*) args;
+    int cislo = 0;
+    int spracovanych = 0;
+    while(spracovanych < myArgs->pocetGenerovanych)
+    {
+        pthread_mutex_lock(myArgs->mutex);
+        while(myArgs->count == 0)
+        {
+            pthread_cond_wait(myArgs->full, myArgs->mutex);
+        }
+        cislo = myArgs->buffer[myArgs->start];
+        myArgs->start = (myArgs->start + 1)%myArgs->bufferSize;
+        myArgs->count--;
+        pthread_mutex_unlock(myArgs->mutex);
+        pthread_cond_signal(myArgs->empty);
+        fibonacciNumber(cislo);
+        spracovanych++;
+    }
+    
+    
+    return NULL;
+}
+
+
+int main521512(int argc, char** argv) {
+    srand(time(0));
+    int bufferSize = 10;
+    int intervalA = 1;
+    int intervalB = 145;
+    int pocetGenerovanych = 50;
+    
+    pthread_t producent;
+    pthread_t konzument;
+    pthread_mutex_t mutex;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_t empty;
+    pthread_cond_init(&empty, NULL);
+    pthread_cond_t full;
+    pthread_cond_init(&full, NULL);
+    /*
+     int* buffer;
+    int bufferSize;
+    int pocetGenerovanych;
+    int start;
+    int count;
+    int intervalA;
+    int intervalB;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+     */
+    ARGUMENTS myArgs = {(int*)malloc(bufferSize * sizeof(int)),
+    bufferSize, pocetGenerovanych, 0, 0, intervalA, intervalB, &empty,
+    &full, &mutex};
+    pthread_create(&producent, NULL, producentFibonacci, &myArgs);
+    pthread_create(&konzument, NULL, consumentFibonacci, &myArgs);
+    
+    pthread_join(producent, NULL);
+    pthread_join(konzument, NULL);
+    
+    pthread_mutex_destroy(myArgs.mutex);
+    pthread_cond_destroy(myArgs.empty);
+    pthread_cond_destroy(myArgs.full);
+    free(myArgs.buffer);
+    return 0;
+}
+
