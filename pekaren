@@ -1,0 +1,132 @@
+#include <cstdlib>
+#include <pthread.h>
+#include <cmath>
+#include <stdbool.h>
+#include <unistd.h>
+#include <cstdio>
+#include <iostream>
+
+using namespace std;
+
+/*
+ * 
+ */
+typedef struct pekar{
+    int pocetZakaznikov;
+    int casVyroby;
+    int* pocetChlebov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}PEKAR;
+typedef struct zakaznik{
+    int idZakaznika;
+    //int casPrichodu;
+    int* pocetChlebov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ZAKAZNIK;
+
+void* konzumentZakaznik(void* args)
+{
+    ZAKAZNIK* zakaznik = (ZAKAZNIK*) args;
+    int prichod = rand()%(6+1 - 2) + 2;
+    sleep(prichod);
+    printf("Zakaznik %d prichadza do pekarne\n", zakaznik->idZakaznika);
+    pthread_mutex_lock(zakaznik->mutex);
+    while((*zakaznik->pocetChlebov) == 0)
+    {
+        printf("Zakaznik %d caka na chleba \n", zakaznik->idZakaznika);
+        pthread_cond_wait(zakaznik->full, zakaznik->mutex);
+    }
+    (*zakaznik->pocetChlebov)--;
+    printf("Zakaznik %d si zobral chleba\n", zakaznik->idZakaznika);
+    pthread_mutex_unlock(zakaznik->mutex);
+    pthread_cond_signal(zakaznik->empty);
+}
+void* producentPekar(void* args)
+{
+    PEKAR* pekar = (PEKAR*) args;
+    int pocitadlo = 0;
+    std::cout << "Pocet chlebov je " << *pekar->pocetChlebov << std::endl;
+    std::cout << "Pekaren otvorena dlzka pecenia je "<< pekar->casVyroby << std::endl;
+    while(pocitadlo < pekar->pocetZakaznikov)
+    {
+        pthread_mutex_lock(pekar->mutex);
+        while((*pekar->pocetChlebov) >= 2 )
+        {
+            std::cout<< "Pekar caka na odobratie chleba, lebo su vylozene 2 chleby" << std::endl;
+            pthread_cond_wait(pekar->empty, pekar->mutex);
+        }
+        std::cout << "Pekar pecie chleba" << std::endl;
+        pthread_mutex_unlock(pekar->mutex);
+        
+        sleep(pekar->casVyroby);
+        //std::cout << "Som za pecenim uz" << std::endl;
+        pthread_mutex_lock(pekar->mutex);
+        (*pekar->pocetChlebov)++;
+        std::cout << "Pekar upiekol chleba, pocet chlebov je " << 
+                *(pekar->pocetChlebov) << std::endl;
+        pthread_mutex_unlock(pekar->mutex);
+        //std::cout << "Pridal som pocitadlo" << std::endl;
+        pthread_cond_signal(pekar->full);
+        ++pocitadlo;
+    }
+    std::cout << "Pekaren zatvorena" << std::endl;
+    return 0;
+}
+
+
+int main124125(int argc, char** argv) {
+    
+    int pocetZakaznikov = 10; //n
+    int dlzkaPecenia = 4;
+    int pocetChlebov = 0;
+    pthread_t pekarVlakno;
+    pthread_t zakazniciVlakna[pocetZakaznikov];
+    pthread_mutex_t mutex;
+    pthread_cond_t empty;
+    pthread_cond_t full;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&empty, NULL);
+    pthread_cond_init(&full, NULL);
+    
+    /* PEKAR
+     *  int pocetZakaznikov;
+        int casVyroby;
+        int* pocetChlebov;
+        pthread_cond_t* empty;
+        pthread_cond_t* full;
+        pthread_mutex_t* mutex;
+         */
+    
+    
+    PEKAR pekar = {pocetZakaznikov, dlzkaPecenia, &pocetChlebov, &empty, &full, &mutex};
+    ZAKAZNIK zakaznici[pocetZakaznikov];
+    pthread_create(&pekarVlakno, NULL, producentPekar, &pekar);
+    
+    for(int i = 0; i < pocetZakaznikov; ++i)
+    {
+        
+        /* ZAKAZNIK
+        int idZakaznika;
+        
+        int* pocetChlebov;
+        pthread_cond_t* empty;
+        pthread_cond_t* full;
+        pthread_mutex_t* mutex;
+        */
+        
+        zakaznici[i] = {i+1, &pocetChlebov, &empty, &full, &mutex };
+        pthread_create(&zakazniciVlakna[i], NULL, konzumentZakaznik, &zakaznici[i]);   
+    }
+    pthread_join(pekarVlakno, NULL);
+    for(int i =0 ; i < pocetZakaznikov ; ++i)
+        pthread_join(zakazniciVlakna[i], NULL);
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&empty);
+    pthread_cond_destroy(&full);
+    return 0;
+}
+
