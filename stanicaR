@@ -1,0 +1,114 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/* 
+ * File:   main.cpp
+ * Author: rudol
+ *
+ * Created on Utorok, 2019, decembra 10, 9:35
+ */
+
+#include <cstdlib>
+#include <thread>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <iostream>
+#include <random>
+
+#define kapacita 10
+#define pocetBodovPrehliadky 3
+
+using namespace std;
+
+/*
+ * 
+ */
+
+typedef struct spolData{
+    volatile int* buffer;
+    volatile int index;
+    pthread_mutex_t* mutex;
+    pthread_cond_t* plne;
+}SPOLDATA;
+
+void* producent(void* par)
+{
+    SPOLDATA* pData = (SPOLDATA*)par;
+    while(true)
+    {
+        int cas=1000000*(((double)rand()/RAND_MAX)*2.5+0.5);
+        usleep(cas);
+        pthread_mutex_lock(pData->mutex);
+        if(pData->index < kapacita)
+        {
+            pData->buffer[pData->index] = 1;
+            pData->index++;
+            cout << "nastupil" <<endl;
+        }else
+        {
+            cout << "ach jaj" <<endl;
+        }
+        if(pData->index == kapacita)
+        {
+            pthread_cond_signal(pData->plne);
+        }
+        pthread_mutex_unlock(pData->mutex);
+    }
+    return NULL;
+}
+void* konzument(void* par)
+{
+    SPOLDATA* kData = (SPOLDATA*)par;
+    while(true)
+    {
+        pthread_mutex_lock(kData->mutex);
+         while(kData->index == 0)
+        {
+        pthread_cond_wait(kData->plne,kData->mutex);
+        }
+        cout <<"odchod"<<endl;
+        pthread_mutex_unlock(kData->mutex);
+        sleep(5);
+        pthread_mutex_lock(kData->mutex);
+         cout <<"prichod"<<endl;
+         kData->index=0;
+        pthread_mutex_unlock(kData->mutex);
+       
+    }
+    return NULL;
+}
+
+
+int main(int argc, char** argv) {
+    pthread_t konz;
+    pthread_t prod[pocetBodovPrehliadky];
+    pthread_mutex_t mutex;
+    pthread_cond_t plne;
+    pthread_mutex_init(&mutex,NULL);
+    pthread_cond_init(&plne,NULL);
+    SPOLDATA hlData = {(int*)malloc(kapacita * sizeof(int)),
+                        0,
+                        &mutex,
+                        &plne                       
+                        };
+    pthread_create(&konz,NULL,konzument,&hlData);
+    for(int i=0; i < pocetBodovPrehliadky;i++)
+    {
+    pthread_create(&prod[i],NULL,producent,&hlData);
+    }
+    
+    pthread_join(konz,NULL);
+    for(int i=0; i < pocetBodovPrehliadky;i++)
+    {
+    pthread_join(prod[i],NULL);
+    }
+    pthread_mutex_destroy(hlData.mutex);
+    pthread_cond_destroy(hlData.plne);   
+    return 0;
+}
+
