@@ -1,0 +1,127 @@
+
+#include <cstdlib>
+#include <iostream>
+#include <pthread.h>
+#include <cmath>
+#include <unistd.h>
+#include <limits.h>
+
+/*
+typedef struct kuchar{
+    int* pocetJedalNaStole;
+    int pocetZakaznikov;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_cond_t* mutex;
+}KUCHAR;
+*/
+typedef struct casnik{
+    int idCasnika;
+    int* pocetJedalNaStole;
+    int pocetZakaznikov;
+    int* pocetObsluzenych;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}CASNIK;
+
+void* casnikObsluhuj(void* args)
+{
+    CASNIK* casnik = (CASNIK*)args;
+    int dlzkaObsluhy;
+    printf("Casnik %d prisiel do prace \n", casnik->idCasnika);
+    while(true)
+    {
+        //printf("Casnik %d za podmienkou \n", casnik->idCasnika);
+        //pthread_mutex_lock(casnik->mutex);
+        pthread_mutex_lock(casnik->mutex);
+        while((*casnik->pocetJedalNaStole) <= 0)
+        {
+            if((*casnik->pocetObsluzenych) == casnik->pocetZakaznikov)
+            {
+                pthread_mutex_unlock(casnik->mutex);
+                printf("Casnik %d ukoncil pracu \n", casnik->idCasnika);
+                usleep(500);
+                return NULL;
+            }
+            pthread_cond_wait(casnik->full, casnik->mutex);
+        }
+        --(*casnik->pocetJedalNaStole);
+        ++(*casnik->pocetObsluzenych);
+        pthread_mutex_unlock(casnik->mutex);
+        pthread_cond_signal(casnik->empty);
+        printf("Casnik %d zapocal obsluhu \n", casnik->idCasnika);
+        dlzkaObsluhy = rand()%(5+1-2) + 2;
+        sleep(dlzkaObsluhy);
+        printf("Casnik %d dokoncil obsluhu \n", casnik->idCasnika);
+    }
+    printf("Casnik %d ukoncil pracu \n", casnik->idCasnika);
+    usleep(500);
+    return NULL;
+}
+/*
+ * 
+ */
+int main(int argc, char** argv) {
+    int maxPocetJedal = 5;
+    int pocetJedalNaStole = 0;
+    int pocetZakaznikov = 10;
+    int pocetObsluzenych = 0;
+    //pthread_t kucharoveVlakno;
+    pthread_t casnik1Vlakno;
+    pthread_t casnik2Vlakno;
+    pthread_mutex_t mutex;
+    pthread_cond_t empty;
+    pthread_cond_t full;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&empty, NULL);
+    pthread_cond_init(&full, NULL);
+    /*
+     
+typedef struct casnik{
+    int idCasnika;
+    int* pocetJedalNaStole;
+    int pocetZakaznikov;
+    int* pocetObsluzenych;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_cond_t* mutex;
+}CASNIK;
+     
+     */
+    CASNIK casnik1 = {1, &pocetJedalNaStole, pocetZakaznikov, &pocetObsluzenych
+    , &empty, &full, &mutex};
+    CASNIK casnik2 = {2, &pocetJedalNaStole, pocetZakaznikov, &pocetObsluzenych
+    , &empty, &full, &mutex};
+    
+    pthread_create(&casnik1Vlakno, NULL, casnikObsluhuj, &casnik1);
+    pthread_create(&casnik2Vlakno, NULL, casnikObsluhuj, &casnik2);
+    std::cout << "Kuchar prichadza do kuchyne" << std::endl;
+    int dlzkaVarenia = 0;
+    for (int i = 0; i < pocetZakaznikov; ++i)
+    {
+        dlzkaVarenia = rand()%(15+1 - 5) + 5;
+        pthread_mutex_lock(&mutex);
+        while( pocetJedalNaStole == maxPocetJedal )
+        {
+            pthread_cond_wait(&empty, &mutex);
+        }
+        std::cout << "Kuchar zacina pripravovat jedlo" << std::endl;
+        pthread_mutex_unlock(&mutex);
+        usleep(dlzkaVarenia* 100000);
+        pthread_mutex_lock(&mutex);
+        pocetJedalNaStole++;
+        std::cout << "Kuchar prirpavil jedlo, na stole je "<< pocetJedalNaStole << std::endl;
+        pthread_mutex_unlock(&mutex);
+        pthread_cond_signal(&full);
+    }
+    std::cout << "Kuchar dovaril" << std::endl;
+    pthread_join(casnik1Vlakno, NULL);
+    pthread_join(casnik2Vlakno, NULL);
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&empty);
+    pthread_cond_destroy(&full);
+    
+    return 0;
+}
+
