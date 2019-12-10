@@ -1,0 +1,118 @@
+#include <cstdlib>
+#include <iostream>
+#include <pthread.h>
+#include <math.h>
+#include <stdbool.h>
+
+/*
+ * 
+ */
+typedef struct arguments{
+    int* buffer;
+    int bufferSize;
+    int pocetGenerovanych;
+    int start;
+    int count;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ARGUMENTS;
+
+void* investigate(void* args)
+{
+    ARGUMENTS* myArgs = (ARGUMENTS*) args;
+    
+    int vygenerovane = 0;
+    int cislo;
+    while(vygenerovane < myArgs->pocetGenerovanych)
+    {
+        cislo = rand()%3;
+        pthread_mutex_lock(myArgs->mutex);
+        while(myArgs->count >= myArgs->bufferSize)
+        {
+            pthread_cond_wait(myArgs->empty, myArgs->mutex);
+        }
+        myArgs->buffer[(myArgs->start + myArgs->count++)%myArgs->bufferSize] = cislo;
+        pthread_mutex_unlock(myArgs->mutex);
+        pthread_cond_signal(myArgs->full);
+        ++vygenerovane;
+    }
+   
+    
+    return NULL;
+}
+
+
+int main214124(int argc, char** argv) {
+    srand(time(0));
+    int bufferSize = 2;
+    int pocetGenerovanych = 10000;
+    pthread_t vlakno;
+    pthread_mutex_t mutex;
+    pthread_cond_t empty;
+    pthread_cond_t full;
+    pthread_mutex_init(&mutex,NULL);
+    pthread_cond_init(&empty,NULL);
+    pthread_cond_init(&full,NULL);
+    ARGUMENTS myArgs = {(int*)malloc(bufferSize * sizeof(int)), bufferSize, pocetGenerovanych,
+    0, 0, &empty, &full, &mutex};
+    
+    pthread_create(&vlakno, NULL, investigate, &myArgs);
+    int spracovanych = 0;
+    int cisloPachatela = -1;
+    int pachatel1=0;
+    int pachatel2=0;
+    int pachatel3=0;
+    while(spracovanych < myArgs.pocetGenerovanych)
+    {
+        pthread_mutex_lock(myArgs.mutex);
+        while(myArgs.count == 0)
+        {
+            pthread_cond_wait(myArgs.full, myArgs.mutex);
+        }
+        cisloPachatela = myArgs.buffer[myArgs.start];
+        myArgs.start = (myArgs.start + 1) % myArgs.bufferSize;
+        --myArgs.count;
+        pthread_mutex_unlock(myArgs.mutex);
+        pthread_cond_signal(myArgs.empty);
+       // std::cout << "Cislo pachatela " << cisloPachatela << std::endl;
+        switch(cisloPachatela)
+        {
+            case 0:
+                ++pachatel1;
+                break;
+            case 1:
+                ++pachatel2;
+                break;
+            case 2:
+                ++pachatel3;
+                break;
+            default:
+                break;
+        }
+        ++spracovanych;
+    }
+    
+    pthread_join(vlakno, NULL);
+    pthread_mutex_destroy(myArgs.mutex);
+    pthread_cond_destroy(myArgs.empty);
+    pthread_cond_destroy(myArgs.full);
+    free(myArgs.buffer);
+    std::cout << "Dokazov proti pachatelovi1 " << pachatel1 << std::endl;
+    std::cout << "Dokazov proti pachatelovi2 " << pachatel2 << std::endl;
+    std::cout << "Dokazov proti pachatelovi3 " << pachatel3 << std::endl;
+    if(pachatel1 > pachatel2)
+    {
+        if (pachatel1 > pachatel3)
+            std::cout<< "Najviac dokazov proti pachatelovi1" << std::endl;
+        else
+            std::cout<< "Najviac dokazov proti pachatelovi3" << std::endl;
+    }
+    else
+        if (pachatel2 > pachatel3)
+            std::cout<< "Najviac dokazov proti pachatelovi2" << std::endl;
+        else
+            std::cout<< "Najviac dokazov proti pachatelovi3" << std::endl;
+    return 0;
+}
+
