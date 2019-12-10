@@ -1,0 +1,224 @@
+#include <pthread.h>
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+#include <cstdlib> //sleep
+#include <stdbool.h>
+#include <math.h>
+#include <string>
+#include <iostream>
+
+typedef struct arguments{
+    int* buffer;
+    int bufferSize;
+    int maxCount;
+    int intervalA;
+    int intervalB;
+    int lastIndex;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ARGUMENTS;
+
+
+int nextPrime(int lastPrime)
+{
+    int nextPrime = lastPrime + 1;
+    bool test = false;
+    while(true)
+    {
+        test = true;
+        for(int i = 2; i <= sqrt(nextPrime); ++i)
+        {
+            if( (nextPrime % i) == 0)
+            {
+                test = false;
+                break;
+            }
+        }
+        if(test)
+        {
+            return nextPrime;
+        }
+        nextPrime++;
+    }
+    return 1;
+}
+
+
+std::string prvociselnyRozklad(int number)
+{
+    int lastPrime = 2;
+    std::string output = "Rozklad pre " + std::to_string(number)+": ";
+    if(number == 1)
+    {
+        output += "1";
+    }
+    while(number != 1)
+    {
+        if( number % lastPrime == 0)
+        {
+            number /= lastPrime;
+            output += std::to_string(lastPrime)+ " ";
+        }
+        else
+        {
+            lastPrime = nextPrime(lastPrime);
+        }
+    }
+    return output;
+}
+
+void* produce(void* args)
+{
+    ARGUMENTS* myArgs = (ARGUMENTS*)args;
+    int randomNumber;
+    int currentlyProduced = 0;
+    while(currentlyProduced < myArgs->maxCount)
+    {   
+        //std::cout << "Thread cyklus Otocenie cislo " << currentlyProduced << std::endl;
+        randomNumber = rand()%(myArgs->intervalB + 1 - myArgs->intervalA) + myArgs->intervalA;
+        //std::cout << "Nahodne cislo v threade je: "<< randomNumber << std::endl;
+        pthread_mutex_lock(myArgs->mutex);
+        while(myArgs->lastIndex >= myArgs->bufferSize)
+        {
+            pthread_cond_wait(myArgs->empty, myArgs->mutex);
+        }
+        myArgs->buffer[myArgs->lastIndex++] = randomNumber;
+        //std::cout << "Nahodne cislo v threade na indexe "  << std::to_string(myArgs->lastIndex - 1)
+               // <<  " je: "<< myArgs->buffer[myArgs->lastIndex - 1] << std::endl;
+        pthread_mutex_unlock(myArgs->mutex);
+        pthread_cond_signal(myArgs->full);
+        currentlyProduced++;
+    }
+}
+
+
+int main21(int argc, char* argv[])
+{
+    std::cout << argv[1] << std::endl;
+    if(argc < 4 )
+    {
+        fprintf(stdout, "Zadali ste malo argumentov \n");
+    }
+    for (int i = 1; i < 4; ++i )
+    {
+        if(atoi(argv[i]) <= 0)
+        {
+            fprintf(stdout, "Parameter %d ma nespravnu hodnotu\n", i);
+        }
+    }
+    srand(time(0)); 
+    int intervalA = atoi(argv[1]);
+    int intervalB = atoi(argv[2]);
+    int pocetGenerovanychCisel = atoi(argv[3]);
+    int bufferSize = 10;
+    
+    pthread_t producent;
+    pthread_mutex_t mutex;
+    pthread_mutex_init(&mutex,NULL);
+    pthread_cond_t empty;
+    pthread_cond_init(&empty,NULL);
+    pthread_cond_t full;
+    pthread_cond_init(&full,NULL);
+    ARGUMENTS myArgs = {(int*)malloc( bufferSize * sizeof(int)), bufferSize, pocetGenerovanychCisel, intervalA,
+    intervalB, 0, &empty, &full, &mutex };
+    pthread_create(&producent, NULL, produce, &myArgs);
+    
+    
+    int randomNumber;
+    int spracovane = 0;
+    
+    while(spracovane < myArgs.maxCount)
+    {
+        pthread_mutex_lock(myArgs.mutex);
+        while(myArgs.lastIndex == 0)
+        {
+            pthread_cond_wait(myArgs.full, myArgs.mutex);
+        }
+        randomNumber = myArgs.buffer[--myArgs.lastIndex];
+        pthread_mutex_unlock(myArgs.mutex);
+        pthread_cond_signal(myArgs.empty);
+       // std::cout << "Signalizoval som. Random cislo bolo: "<< 
+         //       std::to_string(randomNumber) << std::endl;
+        
+       
+        std::cout << std::to_string(spracovane) << " : " << prvociselnyRozklad(randomNumber) << std::endl;
+        spracovane++;
+    }
+    std::cout << "Koncim main" << std::endl;
+    pthread_join(producent, NULL);
+    free(myArgs.buffer);
+    pthread_cond_destroy(myArgs.empty);
+    pthread_cond_destroy(myArgs.full);
+    pthread_mutex_destroy(myArgs.mutex);
+    
+    /*
+    pthread_t vedlajsieVlakno;
+    pthread_mutex_t mutex;
+    pthread_mutex_init(&mutex);
+    pthread_cond_t podmienka;
+    pthread_cond_init(&podmienka);
+    
+    ARGUMENTS argumenty = {(int*)malloc(10 * sizeof(int))};
+    
+    pthread_create(&vedlajsieVlakno, NULL, &producent, &argumenty)
+    
+    
+    free(argumenty.buffer);
+    pthread_mutex_destroy(argumenty.mutex);
+    pthread_cond_destroy(argumenty.cond);
+    pthread_join(vedlajsieVlakno, NULL);
+    */
+    return 0;
+}
+
+
+
+
+/*
+typedef struct arguments {
+    char hodnota;
+    pthread_mutex_t* mutex;
+    pthread_cond_t* zmena;
+}ARGUMENTS;
+
+void* thread_funkcia(void* args) // prorotyp funkcie, musi takto vyzerat
+{
+    ARGUMENTS* tmpArgs = (ARGUMENTS*)args;
+    while(tmpArgs->hodnota != 'q')
+    {
+        pthread_mutex_lock(tmpArgs->mutex);
+        pthread_cond_wait(tmpArgs->zmena, tmpArgs->mutex);
+        printf("Som v threade cislo je %c \n", tmpArgs->hodnota);
+        pthread_mutex_unlock(tmpArgs->mutex);
+    }
+    return NULL;
+}
+
+int main(void)
+{
+    pthread_t vlakno;
+    pthread_mutex_t mutex;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_t podmienka;
+    char tmp = ' ';
+    pthread_cond_init(&podmienka, NULL);
+    ARGUMENTS args = {tmp, &mutex, &podmienka};
+    pthread_create(&vlakno, NULL, &thread_funkcia, &args);
+    while(tmp != 'q')
+    {
+        scanf(" %c", &tmp);
+        printf("Hodnota tmp je %c \n", tmp);
+        pthread_mutex_lock(&mutex);
+        args.hodnota = tmp;
+        pthread_mutex_unlock(&mutex);
+        pthread_cond_signal(args.zmena);
+    }
+    printf("Som v maine a zmenil som cislo \n");
+    pthread_join(vlakno, NULL);
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&podmienka);
+    return 0;
+}
+*/
