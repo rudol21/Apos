@@ -27,6 +27,7 @@
 typedef struct arguments{
     int* buffer;
     int index;
+    int zisk;
     pthread_cond_t* empty;
     pthread_cond_t* full;
     pthread_mutex_t* mutex;
@@ -44,15 +45,12 @@ void* produceRand(void* args)
         int randomNumber1 = 1000000*(((double)rand()/RAND_MAX)*2 + 1.0);
         usleep(randomNumber1);
         pthread_mutex_lock(myArgs->mutex);
-        while(myArgs->index == 10)
-        {
-            pthread_cond_wait(myArgs->empty, myArgs->mutex);
-        }
+       
         
         myArgs->buffer[myArgs->index] = 1;
         myArgs->index++;
         pthread_mutex_unlock(myArgs->mutex);
-        if(myArgs->index == 0)
+        if(myArgs->index == 10)
         {
         pthread_cond_signal(myArgs->full);
         }
@@ -66,23 +64,41 @@ void* produceRand(void* args)
 void* konRand(void* args)
 {
     ARGUMENTS* myArgs = (ARGUMENTS*) args;
+    int naskladnene=0;
     while(true)
     {
-        int randomNumber1 = 1000000*(((double)rand()/RAND_MAX)*2 + 1.0);
-        usleep(randomNumber1);
+        int casPrazenia = 1000000*(((double)rand()/RAND_MAX)*4+ 1.0);
+       
         pthread_mutex_lock(myArgs->mutex);
+        int naskladnene++;
+        if(naskladnene == 5)
+        {
+             usleep(casPrazenia);//su to yatil sekundy
+            naskladnene=0;
+            if(casPrazenia < 3000000 && casPrazenia > 2000000)
+                 int cena =20; 
+            if(casPrazenia < 4000000 && casPrazenia > 3000000)
+                 int cena =30; 
+            if( casPrazenia > 4000000)
+                 int cena =5; 
+             if( casPrazenia < 1000000)
+                 int cena =15; 
+           
+            
+            zisk = zisk + (5*cena);
+        }
         while(myArgs->index == 0)
         {
             pthread_cond_wait(myArgs->full, myArgs->mutex);
-        }
-        
+        }       
         myArgs->buffer[myArgs->index] = 0;
-        myArgs->index++;
+        myArgs->index--;
+        
         pthread_mutex_unlock(myArgs->mutex);
-        if(myArgs->index == 10)
-        {
-        pthread_cond_signal(myArgs->empty);
-        }
+        
+        
+        
+     
        
     }
     
@@ -104,7 +120,7 @@ int main(int argc, char** argv) {
     pthread_mutex_init(&mutex, NULL);
     pthread_cond_init(&empty, NULL);
     pthread_cond_init(&full, NULL);
-    ARGUMENTS myArgs = {(int*)malloc(bufferSize * sizeof(int)), 0,  
+    ARGUMENTS myArgs = {(int*)malloc(bufferSize * sizeof(int)), 0,0,  
     &empty, &full, &mutex};
     
     pthread_create(&vlakno, NULL, produceRand, &myArgs);
