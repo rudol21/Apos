@@ -1,0 +1,123 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/* 
+ * File:   kombinacneCisla.cpp
+ * Author: Mirko
+ *
+ * Created on 6. decembra 2019, 18:04
+ */
+#include <pthread.h>
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+#include <cstdlib> //sleep
+#include <stdbool.h>
+#include <math.h>
+#include <string>
+#include <iostream>
+
+/*
+ * 
+ */
+
+typedef struct arguments{
+    int* buffer;
+    int index;
+    pthread_cond_t* empty;
+    pthread_cond_t* full;
+    pthread_mutex_t* mutex;
+}ARGUMENTS;
+
+
+void* produceRand(void* args)
+{
+    ARGUMENTS* myArgs = (ARGUMENTS*) args;
+   
+    
+  
+    while(true)
+    {
+        int randomNumber1 = 1000000*(((double)rand()/RAND_MAX)*2 + 1.0);
+        usleep(randomNumber1);
+        pthread_mutex_lock(myArgs->mutex);
+        while(myArgs->index == 10)
+        {
+            pthread_cond_wait(myArgs->empty, myArgs->mutex);
+        }
+        
+        myArgs->buffer[myArgs->index] = 1;
+        myArgs->index++;
+        pthread_mutex_unlock(myArgs->mutex);
+        if(myArgs->index == 0)
+        {
+        pthread_cond_signal(myArgs->full);
+        }
+       
+    }
+    
+    
+    return NULL;
+}
+
+void* konRand(void* args)
+{
+    ARGUMENTS* myArgs = (ARGUMENTS*) args;
+    while(true)
+    {
+        int randomNumber1 = 1000000*(((double)rand()/RAND_MAX)*2 + 1.0);
+        usleep(randomNumber1);
+        pthread_mutex_lock(myArgs->mutex);
+        while(myArgs->index == 0)
+        {
+            pthread_cond_wait(myArgs->full, myArgs->mutex);
+        }
+        
+        myArgs->buffer[myArgs->index] = 0;
+        myArgs->index++;
+        pthread_mutex_unlock(myArgs->mutex);
+        if(myArgs->index == 10)
+        {
+        pthread_cond_signal(myArgs->empty);
+        }
+       
+    }
+    
+    
+    return NULL;
+}
+
+
+int main(int argc, char** argv) {
+
+    //std::cout << std::to_string(factorial(6)) << std::endl;
+    
+    srand(time(0));
+    pthread_t vlakno;
+    pthread_t vlaknokonzum;
+    pthread_mutex_t mutex;
+    pthread_cond_t empty;
+    pthread_cond_t full;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&empty, NULL);
+    pthread_cond_init(&full, NULL);
+    ARGUMENTS myArgs = {(int*)malloc(bufferSize * sizeof(int)), 0,  
+    &empty, &full, &mutex};
+    
+    pthread_create(&vlakno, NULL, produceRand, &myArgs);
+    pthread_create(&vlaknokonzum, NULL, konRand, &myArgs);
+    
+    pthread_join(vlakno, NULL);
+    pthread_join(vlaknokonzum, NULL);
+    pthread_mutex_destroy(myArgs.mutex);
+    pthread_cond_destroy(myArgs.empty);
+    pthread_cond_destroy(myArgs.full);
+    free(myArgs.buffer);
+    return 0;
+}
+
+
+
